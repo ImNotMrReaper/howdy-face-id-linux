@@ -38,10 +38,14 @@ for enc in encodings:
 	print("\t" + str(enc["id"]), end="")
 	# Print padding spaces after the id
 	print((4 - len(str(enc["id"]))) * " ", end="")
-	# Format the time as ISO in the local timezone
-	print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(enc["time"])), end="")
+	# Format the time as ISO in the local timezone if present
+	enc_time = enc.get("time")
+	if enc_time:
+		print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(enc_time)), end="")
+	else:
+		print("Recorded Model       ", end="")
 	# End with the label
-	print("  " + enc["label"])
+	print("  " + str(enc.get("label", "unlabeled")))
 
 # Add a closing enter
 print()
