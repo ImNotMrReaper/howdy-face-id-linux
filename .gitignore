@@ -1,0 +1,11 @@
+build/
+*.pyc
+__pycache__/
+*.swp
+*.bak*
+models/*.dat
+!models/.gitkeep
+snapshots/*.jpg
+!snapshots/.gitkeep
+dlib-data/*.dat
+dlib-data/*.bz2
