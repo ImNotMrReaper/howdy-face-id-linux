@@ -1,15 +1,75 @@
-build/
-*.pyc
-__pycache__/
-*.swp
-*.bak*
+# ==============================================================================
+# Sensitive Personal Data, Biometrics & Security Credentials
+# ==============================================================================
+
+# User Biometric Face Models & Vectors (Private Personal Data)
 models/*.dat
+models/*.npy
+models/*.npz
+models/*.bin
+models/*.enc
 !models/.gitkeep
+
+# User Verification Snapshots & Photos
 snapshots/*.jpg
+snapshots/*.jpeg
+snapshots/*.png
 !snapshots/.gitkeep
+
+# Neural Network Weight Files (Large Binaries Downloaded via Install Script)
 dlib-data/*.dat
 dlib-data/*.bz2
 
-# Security Keys
+# Cryptographic Keys & Machine Identity
 security.key
 *.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*.asc
+*.gpg
+
+# Environment Variables & Credentials
+.env
+.env.*
+*.env
+*.secret
+*.secrets
+secrets/
+*credential*
+token.json
+*.token
+
+# Compiled Packages & Build Artifacts
+build/
+dist/
+*.deb
+
+# Python Artifacts & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.swp
+*.swo
+*.bak*
+*~
+.pytest_cache/
+.venv/
+venv/
+
+# Local Logs & Databases
+*.log
+logs/
+*.db
+*.sqlite*
+scratch/
+tmp/
+temp/
+
+# IDE, Editor & OS Artifacts
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.agy_link/
