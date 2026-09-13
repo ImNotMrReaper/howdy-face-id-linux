@@ -9,3 +9,7 @@ snapshots/*.jpg
 !snapshots/.gitkeep
 dlib-data/*.dat
 dlib-data/*.bz2
+
+# Security Keys
+security.key
+*.key

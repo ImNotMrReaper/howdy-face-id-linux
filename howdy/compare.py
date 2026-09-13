@@ -90,13 +90,14 @@ face_detector = None
 pose_predictor = None
 face_encoder = None
 
-# Try to load the face model from the models folder
+# Try to load the face model via hardware-bound AES-256-GCM security module
 try:
-	models = json.load(open(PATH + "/models/" + user + ".dat"))
+	import security
+	models = security.load_user_models(user)
 
 	for model in models:
 		encodings += model["data"]
-except FileNotFoundError:
+except Exception:
 	sys.exit(10)
 
 # Check if the file contains a model
@@ -200,31 +201,37 @@ while True:
 
 	# Create a histogram of the image with 8 values
 	hist = cv2.calcHist([gsframe], [0], None, [8], [0, 256])
-	# All values combined for percentage calculation
 	hist_total = np.sum(hist)
+	darkness = (hist[0] / hist_total * 100) if hist_total > 0 else 100.0
 
-	# Calculate frame darkness
-	darkness = (hist[0] / hist_total * 100)
+	# Per-camera shutter & pitch-black detection
+	cur_cam = getattr(video_capture, "last_cam", None)
+	is_dark = (hist_total == 0) or (darkness >= 98.0) or (darkness > dark_threshold)
 
-	# If the image is fully black due to a bad camera read,
-	# skip to the next frame
-	if (hist_total == 0) or (darkness == 100):
+	if is_dark:
+		if cur_cam is not None:
+			cur_cam["dark_count"] = cur_cam.get("dark_count", 0) + 1
+			# If 3 consecutive dark frames, this camera's shutter is closed or covered
+			if cur_cam["dark_count"] >= 3:
+				remaining = video_capture.prune_camera(cur_cam, reason="Camera shutter closed / sensor pitch dark")
+				if remaining == 0:
+					print("All camera shutters covered or room pitch dark. Defaulting to fingerprint.", file=sys.stderr)
+					sys.exit(13)
+				continue
 		black_tries += 1
 		continue
 
+	# Frame is illuminated and sensor is active
+	if cur_cam is not None:
+		cur_cam["dark_count"] = 0
 	dark_running_total += darkness
 	valid_frames += 1
-	# If the image exceeds darkness threshold due to subject distance,
-	# skip to the next frame
-	if (darkness > dark_threshold):
-		dark_tries += 1
-		continue
 
-	# If the hight is too high
-	if scaling_factor != 1:
-		# Apply that factor to the frame
-		frame = cv2.resize(frame, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
-		gsframe = cv2.resize(gsframe, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
+	# Dynamically scale down frame per-camera if height exceeds max_height
+	if max_height > 0 and frame.shape[0] > max_height:
+		scale = max_height / frame.shape[0]
+		frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+		gsframe = cv2.resize(gsframe, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
 	# Get all faces from that frame as encodings
 	# Upsamples 1 time
@@ -284,6 +291,14 @@ while True:
 				print("Certainty of winning frame: %.3f" % (match * 10, ))
 
 				print("Winning model: %d (\"%s\")" % (match_index, models[match_index]["label"]))
+
+			winning_cam = getattr(video_capture, "last_camera_name", "Camera")
+			for p in ["/dev/shm/howdy_winning_cam", "/run/howdy_winning_cam"]:
+				try:
+					with open(p, "w") as f:
+						f.write(winning_cam + chr(10))
+				except Exception:
+					pass
 
 			# Make snapshot if enabled
 			if capture_successful:

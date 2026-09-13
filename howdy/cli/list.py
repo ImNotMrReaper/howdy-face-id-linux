@@ -20,10 +20,11 @@ if not os.path.exists(path + "/models"):
 # Path to the models file
 enc_file = path + "/models/" + user + ".dat"
 
-# Try to load the models file and abort if the user does not have it yet
-try:
-	encodings = json.load(open(enc_file))
-except FileNotFoundError:
+# Load and decrypt models via hardware-bound AES-256-GCM security module
+sys.path.insert(0, path)
+import security
+encodings = security.load_user_models(user)
+if not encodings:
 	print("No face model known for the user " + user + ", please run:")
 	print("\n\tsudo howdy -U " + user + " add\n")
 	sys.exit(1)

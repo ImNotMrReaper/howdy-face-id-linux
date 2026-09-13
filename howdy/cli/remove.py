@@ -26,10 +26,11 @@ if not os.path.exists(path + "/models"):
 # Path to the models file
 enc_file = path + "/models/" + user + ".dat"
 
-# Try to load the models file and abort if the user does not have it yet
-try:
-	encodings = json.load(open(enc_file))
-except FileNotFoundError:
+# Load models via hardware-bound AES-256-GCM security module
+sys.path.insert(0, path)
+import security
+encodings = security.load_user_models(user)
+if not encodings:
 	print("No face model known for the user " + user + ", please run:")
 	print("\n\thowdy add\n")
 	sys.exit(1)
@@ -76,8 +77,7 @@ else:
 		if str(enc["id"]) != builtins.howdy_args.argument:
 			new_encodings.append(enc)
 
-	# Save this new set to disk
-	with open(enc_file, "w") as datafile:
-		json.dump(new_encodings, datafile)
+	# Save this new set to disk with AES-256-GCM encryption
+	security.save_user_models(user, new_encodings)
 
 	print("Removed model " + builtins.howdy_args.argument)

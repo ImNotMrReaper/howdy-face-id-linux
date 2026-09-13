@@ -79,17 +79,28 @@ def doAuth(pamh):
 		syslog.closelog()
 		return pamh.PAM_AUTH_ERR
 
-	# Status 13 means the camera shutter is covered or pitch black
+	# Status 13 means all cameras are covered, dark, or disconnected
 	elif status == 13:
-		syslog.syslog(syslog.LOG_INFO, "Camera shutter covered or image too dark, defaulting to fingerprint")
+		syslog.syslog(syslog.LOG_INFO, "Camera shutter covered or unavailable, defaulting to fingerprint")
 		syslog.closelog()
-		pamh.conversation(pamh.Message(pamh.PAM_TEXT_INFO, "Camera covered, falling back to secondary authentication..."))
+		pamh.conversation(pamh.Message(pamh.PAM_TEXT_INFO, "Camera covered or unavailable, using fingerprint..."))
 		return pamh.PAM_AUTH_ERR
 	# Status 0 is a successful exit
 	elif status == 0:
 		# Show the success message if it isn't suppressed
 		if not config.getboolean("core", "no_confirmation"):
-			pamh.conversation(pamh.Message(pamh.PAM_TEXT_INFO, "Identified face as " + pamh.get_user()))
+			winning_cam = ""
+			for p in ["/dev/shm/howdy_winning_cam", "/run/howdy_winning_cam"]:
+				if os.path.isfile(p):
+					try:
+						with open(p, "r") as fp:
+							winning_cam = fp.read().strip()
+						os.remove(p)
+						break
+					except Exception:
+						pass
+			cam_str = (" [%s]" % winning_cam) if winning_cam else ""
+			pamh.conversation(pamh.Message(pamh.PAM_TEXT_INFO, "Identified face as " + pamh.get_user() + cam_str))
 
 		syslog.syslog(syslog.LOG_INFO, "Login approved")
 		syslog.closelog()
