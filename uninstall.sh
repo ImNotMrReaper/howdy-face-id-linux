@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Uninstaller for Howdy Linux Face ID Engine
+# Universal 1-Click Uninstaller for Howdy Linux Face ID Engine
+# Remote One-Liner:
+#   curl -fsSL https://raw.githubusercontent.com/ImNotMrReaper/howdy-face-id-linux/main/uninstall.sh | sudo bash
 # ==============================================================================
 
 set -e
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Error: This script must be run as root (sudo ./uninstall.sh)"
+    echo -e "\033[1;31mError: This script must be run as root (sudo ./uninstall.sh)\033[0m"
     exit 1
 fi
 
@@ -31,4 +33,4 @@ if [ -L "/usr/lib/security/howdy" ]; then
     rm -f /usr/lib/security/howdy
 fi
 
-echo "Howdy Face ID Engine has been completely uninstalled and PAM restored."
+echo -e "\n\033[1;32m✓ Howdy Face ID Engine has been completely uninstalled and PAM restored.\033[0m"

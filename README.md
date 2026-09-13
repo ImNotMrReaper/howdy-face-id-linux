@@ -49,26 +49,25 @@ Standard upstream Howdy faces several practical challenges on modern Linux distr
 
 ---
 
-## 🚀 Quick Start & Installation
+## 🚀 Quick Start (1-Line Installation)
 
-### Option 1: Install via Debian Package (`.deb`)
-*Ideal for Ubuntu Desktop, Ubuntu Server, Debian, Linux Mint, and Pop!_OS.*
+Install, build, and configure the complete face recognition engine in a single command across Ubuntu, Debian, Fedora, Arch Linux, and openSUSE:
 
 ```bash
-# 1. Download and install the debian package
-sudo dpkg -i howdy-face-id-auth_1.0.0_amd64.deb
-
-# 2. Resolve system dependencies automatically
-sudo apt-get install -f
+curl -fsSL https://raw.githubusercontent.com/ImNotMrReaper/howdy-face-id-linux/main/install.sh | sudo bash
 ```
 
-### Option 2: Universal Source Installer (`install.sh`)
-*Works on any Linux distribution (Ubuntu, Debian, Fedora, Arch, RHEL).*
-
+### Option 2: Manual Source Installation
 ```bash
 git clone https://github.com/ImNotMrReaper/howdy-face-id-linux.git
 cd howdy-face-id-linux
 sudo ./install.sh
+```
+
+### Option 3: Pre-Compiled Debian Package (`.deb`)
+```bash
+sudo dpkg -i howdy-face-id-auth_1.1.0_amd64.deb
+sudo apt-get install -f
 ```
 
 ---
