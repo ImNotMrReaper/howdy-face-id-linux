@@ -19,7 +19,9 @@ import cv2
 import numpy as np
 import concurrent.futures
 
-howdy_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+howdy_dir = "/lib/security/howdy"
+if not os.path.isdir(howdy_dir):
+    howdy_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, howdy_dir)
 from recorders.video_capture import discover_capture_devices, open_single_camera
 import security
