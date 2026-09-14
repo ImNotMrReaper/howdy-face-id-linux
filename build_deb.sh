@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build/deb"
-VERSION="1.1.0"
+VERSION="1.2.0"
 PKG_NAME="howdy-face-id-auth"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo "amd64")"
 DEB_FILE="${PKG_NAME}_${VERSION}_${ARCH}.deb"
@@ -50,13 +50,14 @@ Version: ${VERSION}
 Section: admin
 Priority: optional
 Architecture: ${ARCH}
-Depends: python3, python3-numpy, python3-opencv, python3-pip, bzip2, wget, curl
+Depends: python3, python3-numpy, python3-opencv, python3-pip, python3-cryptography, bzip2, wget, curl
 Maintainer: Linux Biometrics Team <admin@localhost>
 Description: Enterprise Linux Face ID Biometric Authentication Engine
  Complete facial recognition authentication system for Linux based on Howdy.
- Includes dynamic external USB camera discovery, laptop closed-lid docking support,
- rapid mechanical camera shutter fallback, 5-angle guided Face ID calibration,
- and real-time augmented reality diagnostic HUD.
+ Features MSRCR Multi-Scale Retinex dynamic illumination normalization,
+ OpenCV YuNet deep CNN detection (±85° yaw tolerance), MiniFASNet passive
+ anti-spoofing liveness verification, multi-camera round-robin capture,
+ hardware clamshell lid gating, and machine-bound AES-256-GCM cryptographic vault.
 EOF
 
 # 4. Post-install script
@@ -77,6 +78,17 @@ if [ -d "$DATA_DIR" ]; then
         cd "$DATA_DIR"
         bash install.sh 2>/dev/null || true
     fi
+fi
+
+MODELS_DIR="/lib/security/howdy/models"
+mkdir -p "$MODELS_DIR"
+if [ ! -f "${MODELS_DIR}/face_detection_yunet_2023mar.onnx" ]; then
+    echo ">>> Downloading OpenCV YuNet CNN face detector model..."
+    curl -fsSL "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -o "${MODELS_DIR}/face_detection_yunet_2023mar.onnx" 2>/dev/null || true
+fi
+if [ ! -f "${MODELS_DIR}/minifasnet_v2.onnx" ]; then
+    echo ">>> Downloading MiniFASNet passive liveness model..."
+    curl -fsSL "https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx/resolve/main/minifasnet_v2.onnx" -o "${MODELS_DIR}/minifasnet_v2.onnx" 2>/dev/null || true
 fi
 
 configure_pam() {

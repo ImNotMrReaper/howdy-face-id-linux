@@ -21,11 +21,16 @@ import snapshot
 import numpy as np
 import _thread as thread
 from recorders.video_capture import VideoCapture
+import vision_engine
+vision_engine.lock_process_memory()
 
 
 def init_detector(lock):
 	"""Start face detector, encoder and predictor in a new thread"""
-	global face_detector, pose_predictor, face_encoder
+	global face_detector, pose_predictor, face_encoder, haar_detector, yunet_detector, liveness_verifier
+
+	yunet_detector = vision_engine.ONNXYuNetDetector(PATH + "/models/face_detection_yunet_2023mar.onnx")
+	liveness_verifier = vision_engine.PassiveLivenessVerifier(PATH + "/models/minifasnet_v2.onnx")
 
 	# Test if at lest 1 of the data files is there and abort if it's not
 	if not os.path.isfile(PATH + "/dlib-data/shape_predictor_5_face_landmarks.dat"):
@@ -44,6 +49,11 @@ def init_detector(lock):
 	# Start the others regardless
 	pose_predictor = dlib.shape_predictor(PATH + "/dlib-data/shape_predictor_5_face_landmarks.dat")
 	face_encoder = dlib.face_recognition_model_v1(PATH + "/dlib-data/dlib_face_recognition_resnet_model_v1.dat")
+	haar_path = "/usr/share/opencv4/haarcascades/haarcascade_frontalface_alt2.xml"
+	if os.path.isfile(haar_path):
+		haar_detector = cv2.CascadeClassifier(haar_path)
+	else:
+		haar_detector = None
 
 	# Note the time it took to initialize detectors
 	timings["ll"] = time.time() - timings["ll"]
@@ -60,6 +70,35 @@ def make_snapshot(type):
 		"Hostname: " + os.uname().nodename,
 		"Best certainty value: " + str(round(lowest_certainty * 10, 1))
 	])
+
+
+def adaptive_illumination_enhance(bgr_img, base_gs):
+	"""Multi-environmental lighting adaptation engine.
+	Recovers facial contours in low light, harsh glare, and lower-fidelity
+	integrated laptop cameras without degrading geometry or lowering security thresholds."""
+	mean_val = float(np.mean(base_gs))
+	if mean_val < 85.0:
+		gamma = max(0.45, min(0.85, mean_val / 110.0))
+		inv_gamma = 1.0 / gamma
+		lut = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+		gamma_corrected = cv2.LUT(base_gs, lut)
+		clahe_boost = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8))
+		return clahe_boost.apply(gamma_corrected)
+	elif mean_val > 165.0:
+		gamma = min(1.6, max(1.15, mean_val / 120.0))
+		inv_gamma = 1.0 / gamma
+		lut = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+		compressed = cv2.LUT(base_gs, lut)
+		clahe_glare = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+		return clahe_glare.apply(compressed)
+	else:
+		try:
+			lab = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2LAB)
+			l_chan, a_chan, b_chan = cv2.split(lab)
+			clahe_lab = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8))
+			return clahe_lab.apply(l_chan)
+		except Exception:
+			return base_gs
 
 
 # Make sure we were given an username to tast against
@@ -89,6 +128,8 @@ lowest_certainty = 10
 face_detector = None
 pose_predictor = None
 face_encoder = None
+yunet_detector = None
+liveness_verifier = None
 
 # Try to load the face model via hardware-bound AES-256-GCM security module
 try:
@@ -233,18 +274,40 @@ while True:
 		frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 		gsframe = cv2.resize(gsframe, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
-	# Get all faces from that frame as encodings
-	# Upsamples 1 time
-	face_locations = face_detector(gsframe, 1)
+	# MSRCR & Dynamic Photometric Preprocessing (Gemini Blueprint Section 1)
+	enh_frame, enh_gs, light_desc, light_col = vision_engine.adaptive_photometric_preprocess(frame)
+
+	face_locations = []
+	# Primary: Deep CNN YuNet Detector (Gemini Blueprint Section 2, sub-10ms, +-85 deg yaw)
+	if yunet_detector is not None and yunet_detector.available:
+		yn_faces = yunet_detector.detect(enh_frame)
+		if yn_faces:
+			face_locations = [f["rect"] for f in yn_faces]
+
+	# Secondary: dlib HOG frontal detector
+	if len(face_locations) == 0:
+		face_locations = face_detector(enh_gs, 1)
+
+	# Tertiary: OpenCV Haar Cascade fallback
+	if len(face_locations) == 0 and haar_detector is not None:
+		haar_boxes = haar_detector.detectMultiScale(enh_gs, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+		if len(haar_boxes) > 0:
+			face_locations = [dlib.rectangle(int(hx), int(hy), int(hx + hw), int(hy + hh)) for (hx, hy, hw, hh) in haar_boxes]
 
 	# Loop through each face
 	for fl in face_locations:
 		if use_cnn:
 			fl = fl.rect
 
-		# Fetch the faces in the image
-		face_landmark = pose_predictor(frame, fl)
-		face_encoding = np.array(face_encoder.compute_face_descriptor(frame, face_landmark, 1))
+		# Passive Anti-Spoofing & Liveness Verification (Gemini Blueprint Section 3)
+		if liveness_verifier is not None and liveness_verifier.available:
+			liveness_score, is_live = liveness_verifier.verify(enh_frame, fl)
+			if not is_live:
+				continue
+
+		# Fetch facial landmarks and 128-D descriptor
+		face_landmark = pose_predictor(enh_frame, fl)
+		face_encoding = np.array(face_encoder.compute_face_descriptor(enh_frame, face_landmark, 1))
 
 		# Match this found face against a known face
 		matches = np.linalg.norm(encodings - face_encoding, axis=1)
@@ -305,6 +368,7 @@ while True:
 				make_snapshot("SUCCESSFUL")
 
 			# End peacefully
+			vision_engine.trim_heap_memory()
 			sys.exit(0)
 
 	if exposure != -1:

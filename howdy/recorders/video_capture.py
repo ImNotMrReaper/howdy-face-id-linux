@@ -104,6 +104,19 @@ class VideoCapture:
         # 1. Discover all genuine V4L2 capture devices
         candidates = discover_capture_devices()
 
+        # Hardware Lid Gate: Check ACPI clamshell state
+        try:
+            import vision_engine
+            if vision_engine.is_lid_closed():
+                external_cams = [c for c in candidates if "integrated" not in c["name"].lower() and "webcam" not in c["name"].lower()]
+                if external_cams:
+                    candidates = external_cams
+                else:
+                    print("[Howdy] Clamshell lid closed and no external camera armed; bypassing camera to fingerprint.", file=sys.stderr)
+                    sys.exit(13)
+        except Exception:
+            pass
+
         # Check default_path fallback if candidates empty
         default_path = self.config.get("video", "device_path", fallback="/dev/video0")
         if os.path.exists(default_path) and not any(c["path"] == os.path.realpath(default_path) for c in candidates):

@@ -65,7 +65,7 @@ else
     echo "    Warning: Unknown package manager. Please ensure cmake, opencv, and python3-dlib are installed."
 fi
 
-# 2. Check Python dlib Module
+# 2. Check Python dlib & ONNX Runtime Modules
 echo -e ">>> \033[1;34m[2/6] Verifying Python dlib & computer vision dependencies...\033[0m"
 if python3 -c "import dlib" >/dev/null 2>&1; then
     echo "    dlib is already installed and functional."
@@ -74,6 +74,15 @@ else
     pip3 install dlib --break-system-packages --no-cache-dir || pip3 install dlib || {
         echo -e "\033[1;31mError: Failed to install dlib. Please check build dependencies.\033[0m"
         exit 1
+    }
+fi
+
+if python3 -c "import onnxruntime" >/dev/null 2>&1; then
+    echo "    onnxruntime is already installed and functional."
+else
+    echo "    Installing onnxruntime via pip..."
+    pip3 install onnxruntime --break-system-packages || pip3 install onnxruntime || {
+        echo -e "\033[1;33mWarning: Failed to install onnxruntime via pip. Checking fallback...\033[0m"
     }
 fi
 
@@ -95,16 +104,31 @@ if [ ! -d "/usr/lib/security/howdy" ] && [ -d "/usr/lib/security" ]; then
     ln -sf "${TARGET_LIB_DIR}" "/usr/lib/security/howdy" 2>/dev/null || true
 fi
 
-# 4. Download Neural Network Weights
-echo -e ">>> \033[1;34m[4/6] Checking dlib ResNet & facial landmark models...\033[0m"
+# 4. Download Neural Network Weights & Deep ONNX Models
+echo -e ">>> \033[1;34m[4/6] Checking dlib ResNet, YuNet CNN & MiniFASNet models...\033[0m"
 DATA_DIR="${TARGET_LIB_DIR}/dlib-data"
 if [ ! -f "${DATA_DIR}/shape_predictor_5_face_landmarks.dat" ] || [ ! -f "${DATA_DIR}/dlib_face_recognition_resnet_model_v1.dat" ]; then
-    echo "    Downloading required neural network weights..."
+    echo "    Downloading required dlib neural network weights..."
     cd "${DATA_DIR}"
     bash install.sh
     cd "${SCRIPT_DIR}"
 else
-    echo "    Neural network models already present."
+    echo "    dlib neural network models already present."
+fi
+
+MODELS_DIR="${TARGET_LIB_DIR}/models"
+if [ ! -f "${MODELS_DIR}/face_detection_yunet_2023mar.onnx" ]; then
+    echo "    Downloading YuNet CNN face detection model..."
+    curl -fsSL "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -o "${MODELS_DIR}/face_detection_yunet_2023mar.onnx" || true
+else
+    echo "    YuNet CNN model already present."
+fi
+
+if [ ! -f "${MODELS_DIR}/minifasnet_v2.onnx" ]; then
+    echo "    Downloading MiniFASNet passive anti-spoofing model..."
+    curl -fsSL "https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx/resolve/main/minifasnet_v2.onnx" -o "${MODELS_DIR}/minifasnet_v2.onnx" || true
+else
+    echo "    MiniFASNet anti-spoofing model already present."
 fi
 
 # 5. Install CLI Executables
