@@ -114,7 +114,7 @@ def doAuth(pamh):
 		# Show the success message if it isn't suppressed
 		if not config.getboolean("core", "no_confirmation"):
 			winning_cam = ""
-			for p in ["/dev/shm/howdy_winning_cam", "/run/howdy_winning_cam"]:
+			for p in [f"/dev/shm/howdy_winning_cam_{auth_user}", "/dev/shm/howdy_winning_cam"]:
 				if os.path.isfile(p):
 					try:
 						with open(p, "r") as fp:

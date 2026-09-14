@@ -27,7 +27,7 @@ howdy_dir = "/lib/security/howdy"
 if not os.path.isdir(howdy_dir):
     howdy_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, howdy_dir)
-from recorders.video_capture import discover_capture_devices
+from recorders.video_capture import discover_capture_devices, calibrate_camera_hardware
 import security
 import vision_engine
 
@@ -82,12 +82,8 @@ class ThreadedCamera:
         self.open()
 
     def open(self):
-        # Auto-calibrate hardware sensor sharpness to maximum (7) for crystal-clear fidelity
-        try:
-            subprocess.run(["v4l2-ctl", "-d", self.path, "--set-ctrl=sharpness=7"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        except Exception:
-            pass
+        # Auto-calibrate hardware sensor controls dynamically based on device capabilities
+        calibrate_camera_hardware(self.path, self.name)
 
         self.cap = cv2.VideoCapture(self.path, cv2.CAP_V4L2)
         if self.force_mjpeg:

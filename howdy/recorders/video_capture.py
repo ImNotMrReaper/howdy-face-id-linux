@@ -59,20 +59,46 @@ def discover_capture_devices():
                     })
         except Exception:
             pass
+
+    # Prioritize external USB webcams over integrated laptop cameras so the primary monitor camera captures first
+    cams.sort(key=lambda c: 0 if ("integrated" not in c["name"].lower() and "webcam" not in c["name"].lower() and "laptop" not in c["name"].lower()) else 1)
     return cams
 
 
+def calibrate_camera_hardware(dev_path: str, name: str):
+    """Calibrate camera sensor hardware controls dynamically based on device capabilities"""
+    try:
+        clean = name.lower()
+        if "brio" in clean or "logitech" in clean:
+            # Logitech Brio 100: range 0..255 (default 128 -> set to crisp 160)
+            # Disable dynamic framerate throttle to lock to solid 30 FPS (latency 67ms -> 33ms)
+            subprocess.run(
+                ["v4l2-ctl", "-d", dev_path, "--set-ctrl=sharpness=160", "--set-ctrl=exposure_dynamic_framerate=0"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+            )
+        elif "integrated" in clean or "webcam" in clean:
+            # Dell Integrated FHD sensor: range 1..7 (set to maximum 7)
+            subprocess.run(
+                ["v4l2-ctl", "-d", dev_path, "--set-ctrl=sharpness=7"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+            )
+        else:
+            # General cameras
+            subprocess.run(
+                ["v4l2-ctl", "-d", dev_path, "--set-ctrl=sharpness=7"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+            )
+    except Exception:
+        pass
+
+
 def open_single_camera(dev_info: dict, force_mjpeg: bool = False, fw: int = -1, fh: int = -1):
-    """Open and verify a single V4L2 camera device with hardware sharpness calibration"""
+    """Open and verify a single V4L2 camera device with dynamic hardware sensor calibration"""
     dev_path = dev_info["path"]
     name = dev_info["name"]
     try:
-        # Optimize hardware sensor sharpness for clear, crisp biometric capture
-        try:
-            subprocess.run(["v4l2-ctl", "-d", dev_path, "--set-ctrl=sharpness=7"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        except Exception:
-            pass
+        # Dynamic hardware calibration (sharpness, 30 FPS lock)
+        calibrate_camera_hardware(dev_path, name)
 
         cap = cv2.VideoCapture(dev_path, cv2.CAP_V4L2)
         if force_mjpeg:
@@ -81,6 +107,7 @@ def open_single_camera(dev_info: dict, force_mjpeg: bool = False, fw: int = -1, 
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, fw)
         if fh != -1:
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, fh)
+        cap.set(cv2.CAP_PROP_FPS, 30)
 
         try:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)

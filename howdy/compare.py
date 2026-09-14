@@ -255,12 +255,13 @@ while True:
 
 	# Create a histogram of the image with 8 values
 	hist = cv2.calcHist([gsframe], [0], None, [8], [0, 256])
-	hist_total = np.sum(hist)
-	darkness = (hist[0] / hist_total * 100) if hist_total > 0 else 100.0
+	hist_total = float(np.sum(hist))
+	darkness = float(hist[0][0] / hist_total * 100) if hist_total > 0 else 100.0
+	mean_lum = float(np.mean(gsframe))
 
-	# Per-camera shutter & pitch-black detection
+	# Per-camera shutter & pitch-black detection (only triggers if sensor is genuinely covered/black)
 	cur_cam = getattr(video_capture, "last_cam", None)
-	is_dark = (hist_total == 0) or (darkness >= 98.0) or (darkness > dark_threshold)
+	is_dark = (hist_total == 0) or (darkness >= 96.0 and mean_lum < 6.0) or (darkness > dark_threshold)
 
 	if is_dark:
 		if cur_cam is not None:
@@ -369,10 +370,11 @@ while True:
 				print("Winning model: %d (\"%s\")" % (match_index, models[match_index]["label"]))
 
 			winning_cam = getattr(video_capture, "last_camera_name", "Camera")
-			for p in ["/dev/shm/howdy_winning_cam", "/run/howdy_winning_cam"]:
+			for p in [f"/dev/shm/howdy_winning_cam_{user}", "/dev/shm/howdy_winning_cam"]:
 				try:
 					with open(p, "w") as f:
-						f.write(winning_cam + chr(10))
+						f.write(winning_cam + "\n")
+					os.chmod(p, 0o666)
 				except Exception:
 					pass
 
