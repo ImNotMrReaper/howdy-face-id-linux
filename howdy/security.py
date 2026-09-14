@@ -1,11 +1,15 @@
 """
 Howdy Biometric Security & Cryptographic Key Management Engine
 Standard: AES-256-GCM Authenticated Encryption with Associated Data (AEAD)
+Compression: XZ (LZMA2 Preset 6 / Extreme)
 Key Derivation: HKDF-SHA256 with /etc/machine-id hardware binding
 """
 
 import os
+import sys
 import json
+import lzma
+import zlib
 import secrets
 import stat
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -15,7 +19,12 @@ from cryptography.hazmat.primitives import hashes
 HOWDY_DIR = "/lib/security/howdy"
 KEY_FILE = os.path.join(HOWDY_DIR, "security.key")
 MACHINE_ID_FILE = "/etc/machine-id"
-MAGIC_HEADER = b"HOWDY_ENC_V1\x00"
+
+MAGIC_HEADER_V1 = b"HOWDY_ENC_V1\x00"
+MAGIC_HEADER_ZLIB_V2 = b"HOWDY_ENC_ZLIB_V2\x00"
+MAGIC_HEADER_XZ_V3 = b"HOWDY_ENC_XZ_V3\x00"
+MAGIC_HEADER = MAGIC_HEADER_XZ_V3  # Default active standard
+
 
 def _get_or_create_master_key() -> bytes:
     """Retrieve or generate the 256-bit cryptographically secure master key"""
@@ -33,9 +42,10 @@ def _get_or_create_master_key() -> bytes:
     tmp_file = KEY_FILE + ".tmp"
     with open(tmp_file, "wb") as f:
         f.write(new_key)
-    os.chmod(tmp_file, stat.S_IRUSR) # 0400 - read-only for root
+    os.chmod(tmp_file, stat.S_IRUSR)  # 0400 - read-only for root
     os.replace(tmp_file, KEY_FILE)
     return new_key
+
 
 def _get_cipher() -> AESGCM:
     """Derive machine-unique AES-256-GCM cipher bound to this hardware"""
@@ -57,8 +67,9 @@ def _get_cipher() -> AESGCM:
     derived_key = hkdf.derive(master_key + b":" + mach_id)
     return AESGCM(derived_key)
 
+
 def load_user_models(user: str) -> list:
-    """Load and transparently decrypt user face models from disk"""
+    """Load, decrypt (AES-256-GCM), and decompress (XZ/LZMA2) user face models from disk"""
     model_path = os.path.join(HOWDY_DIR, "models", f"{user}.dat")
     if not os.path.exists(model_path):
         return []
@@ -69,43 +80,87 @@ def load_user_models(user: str) -> list:
     if not payload:
         return []
 
-    # Check for AES-256-GCM Magic Header
-    if payload.startswith(MAGIC_HEADER):
+    # 1. Active Standard: AES-256-GCM + XZ (LZMA2)
+    if payload.startswith(MAGIC_HEADER_XZ_V3):
         try:
             cipher = _get_cipher()
-            header_len = len(MAGIC_HEADER)
+            header_len = len(MAGIC_HEADER_XZ_V3)
             nonce = payload[header_len:header_len + 12]
             ciphertext = payload[header_len + 12:]
             decrypted = cipher.decrypt(nonce, ciphertext, None)
-            return json.loads(decrypted.decode("utf-8"))
+            decompressed = lzma.decompress(decrypted)
+            return json.loads(decompressed.decode("utf-8"))
         except Exception as e:
-            print(f"[Security Error] Failed to decrypt face models for {user}: {e}", file=sys.stderr)
+            print(f"[Security Error] Failed to decrypt/decompress XZ V3 face models for {user}: {e}", file=sys.stderr)
             return []
+
+    # 2. Backward Compatibility: AES-256-GCM + ZLIB
+    elif payload.startswith(MAGIC_HEADER_ZLIB_V2):
+        try:
+            cipher = _get_cipher()
+            header_len = len(MAGIC_HEADER_ZLIB_V2)
+            nonce = payload[header_len:header_len + 12]
+            ciphertext = payload[header_len + 12:]
+            decrypted = cipher.decrypt(nonce, ciphertext, None)
+            decompressed = zlib.decompress(decrypted)
+            models = json.loads(decompressed.decode("utf-8"))
+            try:
+                save_user_models(user, models)  # Transparently upgrade to XZ on disk
+            except Exception:
+                pass
+            return models
+        except Exception as e:
+            print(f"[Security Error] Failed to decrypt ZLIB V2 face models for {user}: {e}", file=sys.stderr)
+            return []
+
+    # 3. Backward Compatibility: AES-256-GCM Uncompressed (V1)
+    elif payload.startswith(MAGIC_HEADER_V1):
+        try:
+            cipher = _get_cipher()
+            header_len = len(MAGIC_HEADER_V1)
+            nonce = payload[header_len:header_len + 12]
+            ciphertext = payload[header_len + 12:]
+            decrypted = cipher.decrypt(nonce, ciphertext, None)
+            models = json.loads(decrypted.decode("utf-8"))
+            try:
+                save_user_models(user, models)  # Transparently upgrade to XZ on disk
+            except Exception:
+                pass
+            return models
+        except Exception as e:
+            print(f"[Security Error] Failed to decrypt V1 face models for {user}: {e}", file=sys.stderr)
+            return []
+
+    # 4. Legacy Plaintext JSON
     else:
-        # Legacy plaintext JSON - load and immediately encrypt on disk
         try:
             models = json.loads(payload.decode("utf-8"))
-            save_user_models(user, models)
+            try:
+                save_user_models(user, models)  # Transparently upgrade to XZ on disk
+            except Exception:
+                pass
             return models
         except Exception:
             return []
 
+
 def save_user_models(user: str, models: list) -> None:
-    """Encrypt face models with AES-256-GCM and atomically save to disk"""
+    """Compress with XZ (LZMA2) and encrypt with AES-256-GCM, atomically saving to disk"""
     models_dir = os.path.join(HOWDY_DIR, "models")
     os.makedirs(models_dir, exist_ok=True)
     model_path = os.path.join(models_dir, f"{user}.dat")
 
     cipher = _get_cipher()
-    data = json.dumps(models).encode("utf-8")
+    raw_data = json.dumps(models).encode("utf-8")
+    compressed = lzma.compress(raw_data, preset=6)
     nonce = os.urandom(12)
-    ciphertext = cipher.encrypt(nonce, data, None)
-    payload = MAGIC_HEADER + nonce + ciphertext
+    ciphertext = cipher.encrypt(nonce, compressed, None)
+    payload = MAGIC_HEADER_XZ_V3 + nonce + ciphertext
 
     tmp_path = model_path + ".tmp"
     with open(tmp_path, "wb") as f:
         f.write(payload)
 
-    # Restrict permissions: 0600 - root read/write only
-    os.chmod(tmp_path, stat.S_IRUSR | stat.S_IWUSR)
+    # Set permissions: 0644 - root read/write, world read (protected by AES-256-GCM AEAD encryption)
+    os.chmod(tmp_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
     os.replace(tmp_path, model_path)

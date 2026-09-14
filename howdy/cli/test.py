@@ -44,10 +44,10 @@ except Exception as e:
 
 known_matrix = np.array(enrolled_vectors) if enrolled_vectors else None
 
-# Discover and open all initial candidate cameras
+# Discover and open all initial candidate cameras (HD 1280x720 MJPG with sensor sharpness optimization)
 candidates = discover_capture_devices()
 with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(candidates))) as executor:
-    results = list(executor.map(lambda c: open_single_camera(c, fw=640, fh=480), candidates))
+    results = list(executor.map(lambda c: open_single_camera(c, force_mjpeg=True, fw=1280, fh=720), candidates))
 caps = [c for c in results if c is not None]
 
 print("\n==================================================================")
@@ -292,7 +292,7 @@ try:
                 active_paths = [c["path"] for c in caps]
                 for dev_info in cur_devs:
                     if dev_info["path"] not in active_paths:
-                        new_c = open_single_camera(dev_info, fw=640, fh=480)
+                        new_c = open_single_camera(dev_info, force_mjpeg=True, fw=1280, fh=720)
                         if new_c:
                             caps.append(new_c)
                             print(f"\033[92m[Howdy Test] Hotplug detected! Armed new camera: {new_c['name']} ({new_c['path']})\033[0m")

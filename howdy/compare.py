@@ -110,6 +110,19 @@ PATH = os.path.abspath(__file__ + "/..")
 
 # The username of the user being authenticated
 user = sys.argv[1]
+if user == "root":
+	caller = os.getenv("SUDO_USER")
+	if not caller or caller == "root":
+		try:
+			import pwd
+			with open("/proc/self/loginuid", "r") as f:
+				luid = int(f.read().strip())
+				if luid >= 1000 and luid != 4294967295:
+					caller = pwd.getpwuid(luid).pw_name
+		except Exception:
+			pass
+	if caller and caller != "root":
+		user = caller
 # The model file contents
 models = []
 # Encoded face models

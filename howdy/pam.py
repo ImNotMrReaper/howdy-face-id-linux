@@ -52,10 +52,34 @@ def doAuth(pamh):
 	if config.getboolean("core", "detection_notice"):
 		pamh.conversation(pamh.Message(pamh.PAM_TEXT_INFO, "Identifying face..."))
 
-	syslog.syslog(syslog.LOG_INFO, "Attempting facial authentication for user " + pamh.get_user())
+	# Determine target user (map 'root' to requesting user in sudo/polkit)
+	target_user = pamh.get_user()
+	auth_user = target_user
+	if auth_user == "root":
+		caller = None
+		try:
+			if hasattr(pamh, "ruser") and pamh.ruser:
+				caller = str(pamh.ruser).strip()
+		except Exception:
+			pass
+		if not caller or caller == "root":
+			try:
+				import pwd
+				with open("/proc/self/loginuid", "r") as f:
+					luid = int(f.read().strip())
+					if luid >= 1000 and luid != 4294967295:
+						caller = pwd.getpwuid(luid).pw_name
+			except Exception:
+				pass
+		if not caller or caller == "root":
+			caller = os.environ.get("SUDO_USER")
+		if caller and caller != "root":
+			auth_user = caller
+
+	syslog.syslog(syslog.LOG_INFO, "Attempting facial authentication for user " + auth_user)
 
 	# Run compare as python3 subprocess to circumvent python version and import issues
-	status = subprocess.call(["/usr/bin/python3", os.path.dirname(os.path.abspath(__file__)) + "/compare.py", pamh.get_user()])
+	status = subprocess.call(["/usr/bin/python3", "/lib/security/howdy/compare.py", auth_user])
 
 	# Status 10 means we couldn't find any face models
 	if status == 10:

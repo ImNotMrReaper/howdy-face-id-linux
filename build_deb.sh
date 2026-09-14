@@ -28,6 +28,7 @@ mkdir -p "${BUILD_DIR}/lib/security/howdy/snapshots"
 cp "${SCRIPT_DIR}/bin/howdy" "${BUILD_DIR}/usr/local/bin/howdy"
 cp "${SCRIPT_DIR}/bin/howdy-scan" "${BUILD_DIR}/usr/local/bin/howdy-scan"
 cp "${SCRIPT_DIR}/bin/howdy-test" "${BUILD_DIR}/usr/local/bin/howdy-test"
+cp "${SCRIPT_DIR}/bin/howdy-hud-enroll" "${BUILD_DIR}/usr/local/bin/howdy-hud-enroll"
 chmod 755 "${BUILD_DIR}/usr/local/bin/"*
 
 # 2. Copy Howdy Core Files

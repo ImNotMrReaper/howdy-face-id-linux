@@ -10,6 +10,7 @@ import sys
 import time
 import configparser
 import concurrent.futures
+import subprocess
 import cv2
 
 VIDIOC_QUERYCAP = 0x80685600
@@ -62,17 +63,29 @@ def discover_capture_devices():
 
 
 def open_single_camera(dev_info: dict, force_mjpeg: bool = False, fw: int = -1, fh: int = -1):
-    """Open and verify a single V4L2 camera device"""
+    """Open and verify a single V4L2 camera device with hardware sharpness calibration"""
     dev_path = dev_info["path"]
     name = dev_info["name"]
     try:
+        # Optimize hardware sensor sharpness for clear, crisp biometric capture
+        try:
+            subprocess.run(["v4l2-ctl", "-d", dev_path, "--set-ctrl=sharpness=7"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        except Exception:
+            pass
+
         cap = cv2.VideoCapture(dev_path, cv2.CAP_V4L2)
         if force_mjpeg:
-            cap.set(cv2.CAP_PROP_FOURCC, 1196444237)  # 'MJPG'
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         if fw != -1:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, fw)
         if fh != -1:
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, fh)
+
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
 
         if cap.isOpened() and cap.grab():
             return {"path": dev_path, "name": name, "cap": cap}

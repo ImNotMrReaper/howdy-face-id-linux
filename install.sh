@@ -137,7 +137,8 @@ mkdir -p "${TARGET_BIN_DIR}"
 cp "${SCRIPT_DIR}/bin/howdy" "${TARGET_BIN_DIR}/howdy"
 cp "${SCRIPT_DIR}/bin/howdy-scan" "${TARGET_BIN_DIR}/howdy-scan"
 cp "${SCRIPT_DIR}/bin/howdy-test" "${TARGET_BIN_DIR}/howdy-test"
-chmod 755 "${TARGET_BIN_DIR}/howdy" "${TARGET_BIN_DIR}/howdy-scan" "${TARGET_BIN_DIR}/howdy-test"
+cp "${SCRIPT_DIR}/bin/howdy-hud-enroll" "${TARGET_BIN_DIR}/howdy-hud-enroll"
+chmod 755 "${TARGET_BIN_DIR}/howdy" "${TARGET_BIN_DIR}/howdy-scan" "${TARGET_BIN_DIR}/howdy-test" "${TARGET_BIN_DIR}/howdy-hud-enroll"
 
 # 6. Configure PAM Pipeline (With Safe Backups & Zero-Lockout Guarantee)
 echo -e ">>> \033[1;34m[6/6] Configuring PAM authentication stack...\033[0m"
